@@ -6,11 +6,11 @@ on:
       os:
         required: true
         type: string
-        description: 'Operating system to build for (ubuntu-24.04, macos-15, windows-latest)'
+        description: 'Operating system (ubuntu-24.04, macos-15, macos-15-intel, windows-latest)'
       platform:
         required: true
         type: string
-        description: 'Platform name for artifact naming (linux-x86_64, macos-arm64, windows-x86_64)'
+        description: 'Platform name for artifact naming (linux-x86_64, macos-arm64, macos-x86_64, windows-x86_64)'
       package:
         required: false
         type: boolean
@@ -24,53 +24,150 @@ on:
 permissions:
   contents: read
 
+# vcpkg download retry and timeout config
+env:
+  VCPKG_MAX_RETRIES: 5
+  VCPKG_DOWNLOAD_TIMEOUT: 600
+
 jobs:
   build:
     runs-on: ${{ inputs.os }}
+    timeout-minutes: 360
     outputs:
-      artifact-name: ${{ steps.package.outputs.artifact-name }}
+      artifact-name: ${{ steps.package.outputs.artifact-name }}${{ steps.package-windows.outputs.artifact-name }}
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
 
+      # ===== System dependencies =====
       - name: Install dependencies (Linux)
         if: inputs.os == 'ubuntu-24.04'
-        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev autoconf autoconf-archive automake libtool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxxf86vm-dev autoconf autoconf-archive automake libtool
 
       - name: Install dependencies (macOS)
         if: startsWith(inputs.os, 'macos')
         run: brew install autoconf autoconf-archive automake libtool
 
-      - name: Cache vcpkg
+      # ===== vcpkg setup with cache + retry =====
+      - name: Cache vcpkg repository
         uses: actions/cache@v5
-        id: cache-vcpkg
+        id: cache-vcpkg-repo
+        with:
+          path: ${{ github.workspace }}/vcpkg
+          key: vcpkg-repo-84bab45d415d22042bd0b9081aea57f362da3f35-${{ runner.os }}
+
+      - name: Setup vcpkg
+        if: steps.cache-vcpkg-repo.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git vcpkg
+          cd vcpkg
+          git checkout 84bab45d415d22042bd0b9081aea57f362da3f35
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ./bootstrap-vcpkg.bat
+          else
+            ./bootstrap-vcpkg.sh
+          fi
+
+      - name: Cache vcpkg installed packages
+        uses: actions/cache@v5
+        id: cache-vcpkg-installed
         with:
           path: ${{ github.workspace }}/vcpkg_installed/
           key: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
-          restore-keys: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-
+          restore-keys: |
+            ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          doNotCache: true
-          vcpkgGitCommitId: '84bab45d415d22042bd0b9081aea57f362da3f35'
-          runVcpkgInstall: ${{ steps.cache-vcpkg-installed.outputs.cache-hit != 'true' || inputs.package }}
-          runVcpkgFormatString: ${{ inputs.os == 'macos-15' && '[`install`, `--recurse`, `--clean-after-build`, `--x-install-root`, `$[env.VCPKG_INSTALLED_DIR]`, `--triplet`, `$[env.VCPKG_DEFAULT_TRIPLET]`, `--allow-unsupported`]' || '' }}
+      # vcpkg install with retry loop - solves intermittent "Download failed" errors
+      - name: Install vcpkg dependencies (Unix with retry)
+        if: steps.cache-vcpkg-installed.outputs.cache-hit != 'true' && runner.os != 'Windows'
+        shell: bash
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-          VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+        run: |
+          VCPKG="${{ github.workspace }}/vcpkg/vcpkg"
+          INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed"
+          MAX_ATTEMPTS=5
 
+          EXTRA_FLAGS=""
+          if [[ "${{ inputs.os }}" == macos* ]]; then
+            EXTRA_FLAGS="--allow-unsupported"
+          fi
+
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "=========================================="
+            echo "=== vcpkg install attempt $attempt / $MAX_ATTEMPTS ==="
+            echo "=========================================="
+
+            if "$VCPKG" install --recurse --clean-after-build \
+                --x-install-root "$INSTALLED_DIR" \
+                $EXTRA_FLAGS; then
+              echo "vcpkg install succeeded on attempt $attempt"
+              exit 0
+            fi
+
+            echo "Attempt $attempt failed"
+            # Remove corrupted partial downloads
+            find "$INSTALLED_DIR" -name "*.download" -delete 2>/dev/null || true
+            find "$INSTALLED_DIR" -name "*.partial" -delete 2>/dev/null || true
+
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              WAIT=$((attempt * 15))
+              echo "Waiting ${WAIT}s before retry..."
+              sleep $WAIT
+            fi
+          done
+
+          echo "vcpkg install failed after $MAX_ATTEMPTS attempts"
+          exit 1
+
+      - name: Install vcpkg dependencies (Windows with retry)
+        if: steps.cache-vcpkg-installed.outputs.cache-hit != 'true' && runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+        run: |
+          $vcpkg = "${{ github.workspace }}\vcpkg\vcpkg.exe"
+          $installedDir = "${{ github.workspace }}\vcpkg_installed"
+          $maxAttempts = 5
+
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "=== vcpkg install attempt $attempt / $maxAttempts ==="
+            & $vcpkg install --recurse --clean-after-build --x-install-root $installedDir
+
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "vcpkg install succeeded on attempt $attempt"
+              exit 0
+            }
+
+            Write-Host "Attempt $attempt failed"
+            if ($attempt -lt $maxAttempts) {
+              $wait = $attempt * 15
+              Write-Host "Waiting ${wait}s before retry..."
+              Start-Sleep -Seconds $wait
+            }
+          }
+
+          Write-Host "vcpkg install failed after $maxAttempts attempts"
+          exit 1
+
+      # ===== Rust + Build =====
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
 
       - name: Build
+        shell: bash
         run: cargo build -vv --release
         env:
+          VCPKG_ROOT: ${{ github.workspace }}/vcpkg
           VCPKG_HAS_BEEN_INSTALLED: 1
 
+      # ===== Package =====
       - name: Package (Unix)
         id: package
         if: inputs.package && inputs.os != 'windows-latest'
