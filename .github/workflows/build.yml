@@ -24,11 +24,6 @@ on:
 permissions:
   contents: read
 
-# vcpkg download retry and timeout config
-env:
-  VCPKG_MAX_RETRIES: 5
-  VCPKG_DOWNLOAD_TIMEOUT: 600
-
 jobs:
   build:
     runs-on: ${{ inputs.os }}
@@ -81,7 +76,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-
 
-      # vcpkg install with retry loop - solves intermittent "Download failed" errors
+      - name: Cache vcpkg downloads
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/vcpkg/downloads
+          key: vcpkg-downloads-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-downloads-${{ runner.os }}-
+
+      # vcpkg install with retry loop
+      # NOTE: removed --clean-after-build so retries reuse already-compiled packages
       - name: Install vcpkg dependencies (Unix with retry)
         if: steps.cache-vcpkg-installed.outputs.cache-hit != 'true' && runner.os != 'Windows'
         shell: bash
@@ -102,7 +106,7 @@ jobs:
             echo "=== vcpkg install attempt $attempt / $MAX_ATTEMPTS ==="
             echo "=========================================="
 
-            if "$VCPKG" install --recurse --clean-after-build \
+            if "$VCPKG" install --recurse \
                 --x-install-root "$INSTALLED_DIR" \
                 $EXTRA_FLAGS; then
               echo "vcpkg install succeeded on attempt $attempt"
@@ -136,7 +140,7 @@ jobs:
 
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
             Write-Host "=== vcpkg install attempt $attempt / $maxAttempts ==="
-            & $vcpkg install --recurse --clean-after-build --x-install-root $installedDir
+            & $vcpkg install --recurse --x-install-root $installedDir
 
             if ($LASTEXITCODE -eq 0) {
               Write-Host "vcpkg install succeeded on attempt $attempt"
