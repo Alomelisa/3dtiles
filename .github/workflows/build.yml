@@ -108,6 +108,7 @@ jobs:
 
             if "$VCPKG" install --recurse \
                 --x-install-root "$INSTALLED_DIR" \
+                --overlay-ports=${{ github.workspace }}/ports \
                 $EXTRA_FLAGS; then
               echo "vcpkg install succeeded on attempt $attempt"
               exit 0
@@ -140,7 +141,7 @@ jobs:
 
           for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
             Write-Host "=== vcpkg install attempt $attempt / $maxAttempts ==="
-            & $vcpkg install --recurse --x-install-root $installedDir
+            & $vcpkg install --recurse --x-install-root $installedDir --overlay-ports=${{ github.workspace }}\ports
 
             if ($LASTEXITCODE -eq 0) {
               Write-Host "vcpkg install succeeded on attempt $attempt"
