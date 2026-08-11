@@ -79,9 +79,14 @@ fn build_win_msvc() {
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
 
+    // Local overlay ports (e.g. tinygltf with corrected download hash).
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable is not set");
+    let overlay_ports = format!("{}/ports", manifest_dir);
+
     let mut config = Config::new(".");
     config
         .define("CMAKE_TOOLCHAIN_FILE", format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("VCPKG_OVERLAY_PORTS", &overlay_ports)
         .define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON")
         .very_verbose(true);
 
@@ -182,10 +187,15 @@ fn build_linux_unknown() {
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
 
+    // Local overlay ports (e.g. tinygltf with corrected download hash).
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable is not set");
+    let overlay_ports = format!("{}/ports", manifest_dir);
+
     // Get VCPKG_ROOT environment variable
     let mut config = Config::new(".");
     config
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("VCPKG_OVERLAY_PORTS", &overlay_ports)
         .define("CMAKE_C_COMPILER", "/usr/bin/gcc")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/g++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
@@ -321,10 +331,15 @@ fn build_macos() {
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
 
+    // Local overlay ports (e.g. tinygltf with corrected download hash).
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable is not set");
+    let overlay_ports = format!("{}/ports", manifest_dir);
+
     // Get VCPKG_ROOT environment variable
     let mut config = Config::new(".");
     config
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("VCPKG_OVERLAY_PORTS", &overlay_ports)
         .define("VCPKG_INSTALL_OPTIONS", "--allow-unsupported")
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
@@ -467,10 +482,15 @@ fn build_macos_x86_64() {
     // Check if strict mode is enabled via environment variable
     let enable_strict = env::var("ENABLE_STRICT_CHECKS").unwrap_or_default() == "1";
 
+    // Local overlay ports (e.g. tinygltf with corrected download hash).
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR environment variable is not set");
+    let overlay_ports = format!("{}/ports", manifest_dir);
+
     // Get VCPKG_ROOT environment variable
     let mut config = Config::new(".");
     config
         .define("CMAKE_TOOLCHAIN_FILE",format!("{}/scripts/buildsystems/vcpkg.cmake", vcpkg_root))
+        .define("VCPKG_OVERLAY_PORTS", &overlay_ports)
         .define("CMAKE_C_COMPILER", "/usr/bin/clang")
         .define("CMAKE_CXX_COMPILER", "/usr/bin/clang++")
         .define("CMAKE_MAKE_PROGRAM", "/usr/bin/make")
