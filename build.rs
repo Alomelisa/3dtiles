@@ -264,23 +264,14 @@ fn build_linux_unknown() {
     // 3. OpenThreads (依赖 _3dtile)
     println!("cargo:rustc-link-lib=OpenThreads");
 
-    // 4. GDAL dependencies
+    // 4. GDAL dependencies (only libs installed by the reduced gdal features)
     println!("cargo:rustc-link-lib=gdal");
-    println!("cargo:rustc-link-lib=geos_c");
-    println!("cargo:rustc-link-lib=geos");
     println!("cargo:rustc-link-lib=proj");
     println!("cargo:rustc-link-lib=sqlite3");
     println!("cargo:rustc-link-lib=expat");
     println!("cargo:rustc-link-lib=curl");
     println!("cargo:rustc-link-lib=ssl");
     println!("cargo:rustc-link-lib=crypto");
-    println!("cargo:rustc-link-lib=uriparser");
-    println!("cargo:rustc-link-lib=kmlbase");
-    println!("cargo:rustc-link-lib=kmlengine");
-    println!("cargo:rustc-link-lib=kmldom");
-    println!("cargo:rustc-link-lib=kmlconvenience");
-    // println!("cargo:rustc-link-lib=qhullcpp");
-    println!("cargo:rustc-link-lib=Lerc");
 
     // 5. Other dependencies
     // println!("cargo:rustc-link-lib=hdf5_hl");
@@ -291,7 +282,6 @@ fn build_linux_unknown() {
 
     // 6. Image / compression libraries
     println!("cargo:rustc-link-lib=geotiff");
-    println!("cargo:rustc-link-lib=gif");
     println!("cargo:rustc-link-lib=jpeg");
     println!("cargo:rustc-link-lib=png");
     println!("cargo:rustc-link-lib=tiff");
@@ -299,10 +289,6 @@ fn build_linux_unknown() {
     println!("cargo:rustc-link-lib=xml2");
     println!("cargo:rustc-link-lib=lzma");
     println!("cargo:rustc-link-lib=openjp2");
-    println!("cargo:rustc-link-lib=qhullstatic_r");
-    println!("cargo:rustc-link-lib=minizip");
-    println!("cargo:rustc-link-lib=spatialite");
-    println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
     // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
@@ -400,22 +386,14 @@ fn build_macos() {
     // 3. OpenThreads (依赖 _3dtile)
     println!("cargo:rustc-link-lib=OpenThreads");
 
-    // 4. GDAL dependencies
+    // 4. GDAL dependencies (only libs installed by the reduced gdal features)
     println!("cargo:rustc-link-lib=gdal");
-    println!("cargo:rustc-link-lib=geos_c");
-    println!("cargo:rustc-link-lib=geos");
     println!("cargo:rustc-link-lib=proj");
     println!("cargo:rustc-link-lib=sqlite3");
     println!("cargo:rustc-link-lib=expat");
     println!("cargo:rustc-link-lib=curl");
     println!("cargo:rustc-link-lib=ssl");
     println!("cargo:rustc-link-lib=crypto");
-    println!("cargo:rustc-link-lib=kmlbase");
-    println!("cargo:rustc-link-lib=kmlengine");
-    println!("cargo:rustc-link-lib=kmldom");
-    println!("cargo:rustc-link-lib=kmlconvenience");
-    // println!("cargo:rustc-link-lib=qhullcpp");
-    println!("cargo:rustc-link-lib=Lerc");
 
     // 5. Other dependencies
     // println!("cargo:rustc-link-lib=hdf5_hl");
@@ -426,7 +404,6 @@ fn build_macos() {
 
     // 6. Image / compression libraries
     println!("cargo:rustc-link-lib=geotiff");
-    println!("cargo:rustc-link-lib=gif");
     println!("cargo:rustc-link-lib=jpeg");
     println!("cargo:rustc-link-lib=png");
     println!("cargo:rustc-link-lib=tiff");
@@ -434,10 +411,6 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=xml2");
     println!("cargo:rustc-link-lib=lzma");
     println!("cargo:rustc-link-lib=openjp2");
-    println!("cargo:rustc-link-lib=qhullstatic_r");
-    println!("cargo:rustc-link-lib=minizip");
-    println!("cargo:rustc-link-lib=spatialite");
-    println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
     // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
@@ -551,22 +524,14 @@ fn build_macos_x86_64() {
     // 3. OpenThreads (依赖 _3dtile)
     println!("cargo:rustc-link-lib=OpenThreads");
 
-    // 4. GDAL dependencies
+    // 4. GDAL dependencies (only libs installed by the reduced gdal features)
     println!("cargo:rustc-link-lib=gdal");
-    println!("cargo:rustc-link-lib=geos_c");
-    println!("cargo:rustc-link-lib=geos");
     println!("cargo:rustc-link-lib=proj");
     println!("cargo:rustc-link-lib=sqlite3");
     println!("cargo:rustc-link-lib=expat");
     println!("cargo:rustc-link-lib=curl");
     println!("cargo:rustc-link-lib=ssl");
     println!("cargo:rustc-link-lib=crypto");
-    println!("cargo:rustc-link-lib=kmlbase");
-    println!("cargo:rustc-link-lib=kmlengine");
-    println!("cargo:rustc-link-lib=kmldom");
-    println!("cargo:rustc-link-lib=kmlconvenience");
-    // println!("cargo:rustc-link-lib=qhullcpp");
-    println!("cargo:rustc-link-lib=Lerc");
 
     // 5. Other dependencies
     // println!("cargo:rustc-link-lib=hdf5_hl");
@@ -577,7 +542,6 @@ fn build_macos_x86_64() {
 
     // 6. Image / compression libraries
     println!("cargo:rustc-link-lib=geotiff");
-    println!("cargo:rustc-link-lib=gif");
     println!("cargo:rustc-link-lib=jpeg");
     println!("cargo:rustc-link-lib=png");
     println!("cargo:rustc-link-lib=tiff");
@@ -585,10 +549,6 @@ fn build_macos_x86_64() {
     println!("cargo:rustc-link-lib=xml2");
     println!("cargo:rustc-link-lib=lzma");
     println!("cargo:rustc-link-lib=openjp2");
-    println!("cargo:rustc-link-lib=qhullstatic_r");
-    println!("cargo:rustc-link-lib=minizip");
-    println!("cargo:rustc-link-lib=spatialite");
-    println!("cargo:rustc-link-lib=freexl");
     println!("cargo:rustc-link-lib=basisu_encoder");
     println!("cargo:rustc-link-lib=meshoptimizer");
     // zstd is required by gdal/basisu when building KTX2 (supercompression) and some GDAL drivers
