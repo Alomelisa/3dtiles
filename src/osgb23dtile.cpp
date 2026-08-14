@@ -16,6 +16,15 @@
 #include <cstdint>
 #include <limits>
 
+// Windows API for UTF-8 <-> GBK(CP_ACP) path conversion in osg_string/utf8_string.
+// OSG's osgDB::convertStringFromUTF8toCurrentCodePage is a no-op in this build, so we
+// convert with MultiByteToWideChar/WideCharToMultiByte ourselves to make fopen/osgDB
+// accept Chinese (UTF-8) paths on Windows.
+#ifdef _WIN32
+  #define WIN32_LEAN_AND_MEAN
+  #include <windows.h>
+#endif
+
 // Add Basis Universal includes for KTX2 compression
 #include <basisu/encoder/basisu_comp.h>
 #include <basisu/transcoder/basisu_transcoder.h>
@@ -349,23 +358,46 @@ std::string normalize_path(const char* path)
 }
 
 std::string osg_string ( const char* path ) {
-    #ifdef WIN32
-        std::string root_path =
-        osgDB::convertStringFromUTF8toCurrentCodePage(normalize_path(path));
-    #else
-        std::string root_path = (path);
-    #endif // WIN32
-    return root_path;
+    std::string normalized = normalize_path(path);
+#ifdef _WIN32
+    if (normalized.empty()) return normalized;
+    // UTF-8 -> UTF-16
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, normalized.c_str(), -1, nullptr, 0);
+    if (wlen <= 0) return normalized;              // parse failure -> fall back to original
+    std::wstring wpath(wlen, 0);
+    MultiByteToWideChar(CP_UTF8, 0, normalized.c_str(), -1, &wpath[0], wlen);
+    // UTF-16 -> GBK(CP_ACP), matching fopen/osgDB's code page on Windows
+    int mlen = WideCharToMultiByte(CP_ACP, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (mlen <= 0) return normalized;              // unrepresentable char -> fall back
+    std::string gbk(mlen, 0);
+    WideCharToMultiByte(CP_ACP, 0, wpath.c_str(), -1, &gbk[0], mlen, nullptr, nullptr);
+    gbk.pop_back();                                // drop trailing '\0'
+    return gbk;
+#else
+    return normalized;
+#endif
 }
 
 std::string utf8_string (const char* path) {
-    #ifdef WIN32
-        std::string utf8 =
-        osgDB::convertStringFromCurrentCodePageToUTF8(path);
-    #else
-        std::string utf8 = (path);
-    #endif // WIN32
+#ifdef _WIN32
+    if (!path) return std::string();
+    std::string cur(path);
+    if (cur.empty()) return cur;
+    // CP_ACP(GBK) -> UTF-16
+    int wlen = MultiByteToWideChar(CP_ACP, 0, cur.c_str(), -1, nullptr, 0);
+    if (wlen <= 0) return cur;
+    std::wstring wpath(wlen, 0);
+    MultiByteToWideChar(CP_ACP, 0, cur.c_str(), -1, &wpath[0], wlen);
+    // UTF-16 -> UTF-8
+    int mlen = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (mlen <= 0) return cur;
+    std::string utf8(mlen, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), -1, &utf8[0], mlen, nullptr, nullptr);
+    utf8.pop_back();                               // drop trailing '\0'
     return utf8;
+#else
+    return std::string(path);
+#endif
 }
 
 int get_lvl_num(std::string file_name){
