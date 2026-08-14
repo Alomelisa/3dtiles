@@ -192,6 +192,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path release
           Copy-Item target/release/_3dtile.exe release/
+      Copy-Item target/release/*.dll release/
           Copy-Item -Recurse target/release/gdal release/
           Copy-Item -Recurse target/release/proj release/
           Copy-Item -Recurse target/release/osgPlugins-3.6.5 release/
