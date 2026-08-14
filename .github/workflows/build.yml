@@ -192,10 +192,31 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path release
           Copy-Item target/release/_3dtile.exe release/
-      Copy-Item target/release/*.dll release/
           Copy-Item -Recurse target/release/gdal release/
           Copy-Item -Recurse target/release/proj release/
           Copy-Item -Recurse target/release/osgPlugins-3.6.5 release/
+          # Copy any runtime DLLs cargo/cmake happened to place next to the exe (best-effort;
+          # may be empty).
+          Copy-Item target/release/*.dll release/ -ErrorAction SilentlyContinue
+          # Then copy the vcpkg runtime DLLs (gdal/proj/zstd/basisu_encoder/meshoptimizer/
+          # GeographicLib/sqlite3/osg*/OpenThreads and their transitive deps). Without these the
+          # loader aborts with STATUS_DLL_NOT_FOUND (0xC0000135) before main() runs -- the previous
+          # artifact's help.txt/version.txt were captured cmd errors precisely because the exe
+          # could not start.
+          $vcpkgBin = "vcpkg_installed/x64-windows/bin"
+          if (-not (Test-Path $vcpkgBin)) {
+            Write-Host "::error::vcpkg runtime bin dir not found at $vcpkgBin; the packaged exe would be missing DLLs"
+            exit 1
+          }
+          Copy-Item "$vcpkgBin/*.dll" release/
+          Write-Host "release/ now has $((Get-ChildItem release/*.dll).Count) DLLs"
+          # Smoke-test: the exe must actually start. Catches missing-DLL packaging regressions at
+          # CI time instead of shipping a broken zip.
+          & "release/_3dtile.exe" --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::_3dtile.exe --version exited $LASTEXITCODE (still missing a DLL?)"
+            exit 1
+          }
           Compress-Archive -Path release/* -DestinationPath _3dtile-${{ inputs.platform }}.zip
           echo "artifact-name=${{ inputs.platform }}" >> $env:GITHUB_OUTPUT
 
