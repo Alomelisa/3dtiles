@@ -254,6 +254,17 @@ jobs:
           $shpB3dm = (Get-ChildItem smoke/shp_out -Recurse -Filter *.b3dm).Count
           if ($shpB3dm -lt 1) { Write-Host "::error::shape smoke: no b3dm emitted"; exit 1 }
           Write-Host "shape smoke OK: ge=$($shpTs.root.geometricError), b3dm=$shpB3dm"
+
+          # max_lvl 参数回归对照: 带 -c max_lvl 的产出瓦片数必须与不带时一致
+          # (2026-09 回归: 依赖漂移后带 -c 仅产出 29/265 且 geometricError 全 0)
+          & "release/_3dtile.exe" -f osgb -i smoke/osgb_in -o smoke/osgb_out_lvl -c '{"max_lvl":20}'
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::osgb smoke(max_lvl) conversion failed"; exit 1 }
+          $lvlB3dm = (Get-ChildItem smoke/osgb_out_lvl -Recurse -Filter *.b3dm).Count
+          if ($lvlB3dm -lt $osgbB3dm) {
+            Write-Host "::error::max_lvl 回归: 带 -c max_lvl=20 产出 $lvlB3dm b3dm < 基线 $osgbB3dm"
+            exit 1
+          }
+          Write-Host "max_lvl smoke OK: b3dm=$lvlB3dm"
           # ===== End conversion smoke gate =====
           Compress-Archive -Path release/* -DestinationPath _3dtile-${{ inputs.platform }}.zip
           echo "artifact-name=${{ inputs.platform }}" >> $env:GITHUB_OUTPUT
