@@ -13,6 +13,6 @@ jobs:
   build-and-test:
     uses: ./.github/workflows/build.yml
     with:
-      os: windows-latest
+      os: windows-2022
       platform: windows-x86_64
       package: true

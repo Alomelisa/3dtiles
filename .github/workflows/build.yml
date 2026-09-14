@@ -6,7 +6,7 @@ on:
       os:
         required: true
         type: string
-        description: 'Operating system (ubuntu-24.04, macos-15, macos-15-intel, windows-latest)'
+        description: 'Operating system (ubuntu-24.04, macos-15, macos-15-intel, windows-2022)'
       platform:
         required: true
         type: string
@@ -55,16 +55,21 @@ jobs:
           key: vcpkg-repo-84bab45d415d22042bd0b9081aea57f362da3f35-${{ runner.os }}
 
       - name: Setup vcpkg
-        if: steps.cache-vcpkg-repo.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          git clone https://github.com/microsoft/vcpkg.git vcpkg
+          # 缓存命中时也必须钉回基线 commit:缓存的 vcpkg 树可能处于任意
+          # commit(2026-09 回归的漂移向量之一),不能因 cache-hit 跳过 checkout
+          if [ ! -d vcpkg/.git ]; then
+            git clone https://github.com/microsoft/vcpkg.git vcpkg
+          fi
           cd vcpkg
           git checkout 84bab45d415d22042bd0b9081aea57f362da3f35
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            ./bootstrap-vcpkg.bat
-          else
-            ./bootstrap-vcpkg.sh
+          if [ ! -f vcpkg.exe ]; then
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              ./bootstrap-vcpkg.bat
+            else
+              ./bootstrap-vcpkg.sh
+            fi
           fi
 
       - name: Cache vcpkg installed packages
@@ -73,8 +78,8 @@ jobs:
         with:
           path: ${{ github.workspace }}/vcpkg_installed/
           key: ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
-          restore-keys: |
-            ${{ runner.os }}${{ inputs.os == 'macos-15' && '-arm' || inputs.os == 'macos-15-intel' && '-x64' || '' }}-vcpkg-
+        # 注意: 不设 restore-keys 前缀回退——回退可能恢复用旧依赖版本编译的
+        # 安装树, 造成"同一 commit 重编译行为漂移"(2026-09 回归的漂移向量之一)
 
       - name: Cache vcpkg downloads
         uses: actions/cache@v5
@@ -175,7 +180,7 @@ jobs:
       # ===== Package =====
       - name: Package (Unix)
         id: package
-        if: inputs.package && inputs.os != 'windows-latest'
+        if: inputs.package && !startsWith(inputs.os, 'windows')
         run: |
           mkdir -p release
           cp target/release/_3dtile release/
@@ -187,7 +192,7 @@ jobs:
 
       - name: Package (Windows)
         id: package-windows
-        if: inputs.package && inputs.os == 'windows-latest'
+        if: inputs.package && startsWith(inputs.os, 'windows')
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path release
@@ -217,6 +222,39 @@ jobs:
             Write-Host "::error::_3dtile.exe --version exited $LASTEXITCODE (still missing a DLL?)"
             exit 1
           }
+          # ===== Conversion smoke gate =====
+          # 真实转换一次样例数据, 断言瓦片产出与 geometricError > 0。
+          # 拦截两类已发生过的回归: (a) osgb/shape 瓦片截断(265→29);
+          # (b) geometricError 全 0(Cesium 永不细化, 预览全黑)。
+          $env:PROJ_DATA = "$PWD/release/proj"
+          $env:GDAL_DATA = "$PWD/release/gdal"
+          $env:OSG_LIBRARY_PATH = "$PWD/release/osgPlugins-3.6.5"
+          New-Item -ItemType Directory -Path smoke/osgb_in/Data/Tile_+000_+000 -Force | Out-Null
+          Copy-Item data/test/test.osgb smoke/osgb_in/Data/Tile_+000_+000/Tile_+000_+000.osgb
+          Set-Content -Path smoke/osgb_in/metadata.xml -Value '<?xml version="1.0" encoding="utf-8"?><ModelMetadata version="1"><SRS>ENU:31.15,114.51</SRS><SRSOrigin>0,0,0</SRSOrigin></ModelMetadata>'
+
+          & "release/_3dtile.exe" -f osgb -i smoke/osgb_in -o smoke/osgb_out
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::osgb smoke conversion failed"; exit 1 }
+          $osgbTs = Get-Content smoke/osgb_out/tileset.json -Raw | ConvertFrom-Json
+          if (-not $osgbTs.root.geometricError -or $osgbTs.root.geometricError -le 0) {
+            Write-Host "::error::osgb smoke: root geometricError=$($osgbTs.root.geometricError) (ge=0 回归: Cesium 永不细化)"
+            exit 1
+          }
+          $osgbB3dm = (Get-ChildItem smoke/osgb_out -Recurse -Filter *.b3dm).Count
+          if ($osgbB3dm -lt 1) { Write-Host "::error::osgb smoke: no b3dm emitted"; exit 1 }
+          Write-Host "osgb smoke OK: ge=$($osgbTs.root.geometricError), b3dm=$osgbB3dm"
+
+          & "release/_3dtile.exe" -f shape -i data/test/smoke_shape.shp -o smoke/shp_out --height height
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::shape smoke conversion failed"; exit 1 }
+          $shpTs = Get-Content smoke/shp_out/tileset.json -Raw | ConvertFrom-Json
+          if (-not $shpTs.root.geometricError -or $shpTs.root.geometricError -le 0) {
+            Write-Host "::error::shape smoke: root geometricError=$($shpTs.root.geometricError)"
+            exit 1
+          }
+          $shpB3dm = (Get-ChildItem smoke/shp_out -Recurse -Filter *.b3dm).Count
+          if ($shpB3dm -lt 1) { Write-Host "::error::shape smoke: no b3dm emitted"; exit 1 }
+          Write-Host "shape smoke OK: ge=$($shpTs.root.geometricError), b3dm=$shpB3dm"
+          # ===== End conversion smoke gate =====
           Compress-Archive -Path release/* -DestinationPath _3dtile-${{ inputs.platform }}.zip
           echo "artifact-name=${{ inputs.platform }}" >> $env:GITHUB_OUTPUT
 
@@ -225,4 +263,4 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.platform }}
-          path: _3dtile-${{ inputs.platform }}${{ inputs.os == 'windows-latest' && '.zip' || '.tar.gz' }}
+          path: _3dtile-${{ inputs.platform }}${{ startsWith(inputs.os, 'windows') && '.zip' || '.tar.gz' }}
