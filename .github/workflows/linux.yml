@@ -15,4 +15,4 @@ jobs:
     with:
       os: ubuntu-24.04
       platform: linux-x86_64
-      package: false
+      package: true
